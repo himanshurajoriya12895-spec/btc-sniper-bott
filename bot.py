@@ -1,12 +1,10 @@
 """
-ULTIMATE DAILY SIGNAL BOT
-- Har Din 1 Perfect Trade
-- 70-80% Win Rate Logic
-- Volatility Based Entry
-- Market Behavior Analysis
+ULTIMATE DAILY SIGNAL BOT - FIXED VERSION
+- Har Din Signal Aayega
 - Gmail Alert
-- Zero API Key
-- 24/7 Render Pe Chalega
+- 24/7 Render Pe
+- Score 8+ pe signal
+- Har ghante scan
 """
 
 import requests
@@ -29,15 +27,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Daily Signal Bot Running 24/7!")
+        self.wfile.write(b"Bot Running 24/7!")
     def log_message(self, *args):
         pass
 
-def run_server():
-    server = HTTPServer(('0.0.0.0', 10000), Handler)
-    server.serve_forever()
-
-threading.Thread(target=run_server, daemon=True).start()
+threading.Thread(
+    target=lambda: HTTPServer(('0.0.0.0', 10000), Handler).serve_forever(),
+    daemon=True
+).start()
 
 # ==================== DATA ====================
 def get_ohlcv(interval='1h', limit=100):
@@ -58,39 +55,44 @@ def get_ohlcv(interval='1h', limit=100):
 
 def get_price():
     try:
-        r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={SYMBOL}", timeout=10)
+        r = requests.get(
+            f"https://api.binance.com/api/v3/ticker/price?symbol={SYMBOL}",
+            timeout=10
+        )
         return float(r.json()['price'])
     except:
         return 0.0
 
 def get_funding_rate():
     try:
-        r = requests.get(f"https://fapi.binance.com/fapi/v1/fundingRate?symbol={SYMBOL}&limit=1", timeout=10)
+        r = requests.get(
+            f"https://fapi.binance.com/fapi/v1/fundingRate?symbol={SYMBOL}&limit=1",
+            timeout=10
+        )
         return float(r.json()[-1]['fundingRate']) * 100
-    except:
-        return 0.0
-
-def get_open_interest():
-    try:
-        r = requests.get(f"https://fapi.binance.com/fapi/v1/openInterest?symbol={SYMBOL}", timeout=10)
-        return float(r.json()['openInterest'])
     except:
         return 0.0
 
 def get_long_short_ratio():
     try:
-        r = requests.get(f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={SYMBOL}&period=1h&limit=2", timeout=10)
+        r = requests.get(
+            f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={SYMBOL}&period=1h&limit=2",
+            timeout=10
+        )
         return float(r.json()[-1]['longShortRatio'])
     except:
         return 1.0
 
 def get_whale_flow():
     try:
-        r   = requests.get(f"https://api.binance.com/api/v3/aggTrades?symbol={SYMBOL}&limit=1000", timeout=10)
+        r   = requests.get(
+            f"https://api.binance.com/api/v3/aggTrades?symbol={SYMBOL}&limit=1000",
+            timeout=10
+        )
         df  = pd.DataFrame(r.json())
         df['qty']  = df['q'].astype(float)
         df['side'] = df['m'].apply(lambda x: "SELL" if x else "BUY")
-        big        = df[df['qty'] >= 5.0]
+        big        = df[df['qty'] >= 3.0]
         buy_vol    = big[big['side'] == "BUY"]['qty'].sum()
         sell_vol   = big[big['side'] == "SELL"]['qty'].sum()
         return buy_vol, sell_vol
@@ -99,7 +101,10 @@ def get_whale_flow():
 
 def get_fear_greed():
     try:
-        r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=10)
+        r = requests.get(
+            "https://api.alternative.me/fng/?limit=1",
+            timeout=10
+        )
         return int(r.json()['data'][0]['value'])
     except:
         return 50
@@ -132,52 +137,8 @@ def calc_bb(s, p=20):
     std = s.rolling(p).std()
     return sma + std*2, sma, sma - std*2
 
-def calc_volatility(df):
-    """
-    Volatility based position sizing
-    High vol = chota trade
-    Low vol  = normal trade
-    """
-    atr     = calc_atr(df).iloc[-1]
-    price   = df['close'].iloc[-1]
-    atr_pct = (atr / price) * 100
-    
-    if atr_pct > 3.0:
-        return 'HIGH', atr_pct
-    elif atr_pct > 1.5:
-        return 'MEDIUM', atr_pct
-    else:
-        return 'LOW', atr_pct
-
-def find_key_levels(df):
-    """Support aur Resistance levels"""
-    highs = []
-    lows  = []
-    
-    for i in range(10, len(df)-3):
-        if df['high'].iloc[i] == df['high'].iloc[i-10:i+3].max():
-            highs.append(df['high'].iloc[i])
-        if df['low'].iloc[i] == df['low'].iloc[i-10:i+3].min():
-            lows.append(df['low'].iloc[i])
-    
-    return highs[-3:] if highs else [], lows[-3:] if lows else []
-
-# ==================== MAIN SIGNAL LOGIC ====================
-def generate_daily_signal():
-    """
-    70-80% Win Rate Logic:
-    
-    1. Market Structure (Daily + 4H)
-    2. Volatility Check
-    3. Whale Flow
-    4. Key Levels
-    5. Multiple Confirmations
-    
-    Sirf tab signal do jab
-    8+ factors ek direction mein hon
-    """
-    
-    # Fetch all data
+# ==================== SIGNAL ====================
+def generate_signal():
     df_1d  = get_ohlcv('1d', 100)
     df_4h  = get_ohlcv('4h', 100)
     df_1h  = get_ohlcv('1h', 100)
@@ -186,110 +147,91 @@ def generate_daily_signal():
     ls     = get_long_short_ratio()
     fg     = get_fear_greed()
     wb, ws = get_whale_flow()
-    
+
     if df_1h.empty or price == 0:
         return None
-    
+
     score_long  = 0
     score_short = 0
     reasons     = []
-    
-    # ===== 1. DAILY TREND =====
+
+    # 1. DAILY TREND
     if not df_1d.empty:
-        ema50_d  = calc_ema(df_1d['close'], 50).iloc[-1]
         ema200_d = calc_ema(df_1d['close'], 200).iloc[-1]
-        
+        ema50_d  = calc_ema(df_1d['close'], 50).iloc[-1]
         if price > ema200_d:
             score_long += 2
-            reasons.append("✅ Daily Trend: BULLISH")
+            reasons.append("✅ Daily Bullish Trend")
         else:
             score_short += 2
-            reasons.append("✅ Daily Trend: BEARISH")
-        
+            reasons.append("✅ Daily Bearish Trend")
         if ema50_d > ema200_d:
             score_long += 1
-            reasons.append("✅ Golden Cross Active")
+            reasons.append("✅ Golden Cross")
         else:
             score_short += 1
-            reasons.append("✅ Death Cross Active")
+            reasons.append("✅ Death Cross")
 
-    # ===== 2. 4H STRUCTURE =====
+    # 2. 4H STRUCTURE
     if not df_4h.empty:
         ema21_4h = calc_ema(df_4h['close'], 21).iloc[-1]
         rsi_4h   = calc_rsi(df_4h['close']).iloc[-1]
         rsi_prev = calc_rsi(df_4h['close']).iloc[-2]
-        
         if price > ema21_4h:
             score_long += 2
-            reasons.append(f"✅ 4H: Above EMA21")
+            reasons.append("✅ 4H Bullish")
         else:
             score_short += 2
-            reasons.append(f"✅ 4H: Below EMA21")
-        
-        if 35 <= rsi_4h <= 65:
-            if rsi_4h > rsi_prev:
-                score_long += 1
-                reasons.append(f"✅ RSI Rising: {rsi_4h:.0f}")
-            else:
-                score_short += 1
-                reasons.append(f"✅ RSI Falling: {rsi_4h:.0f}")
-        
+            reasons.append("✅ 4H Bearish")
         if rsi_4h < 35:
             score_long += 2
             reasons.append(f"✅ RSI Oversold: {rsi_4h:.0f}")
         elif rsi_4h > 65:
             score_short += 2
             reasons.append(f"✅ RSI Overbought: {rsi_4h:.0f}")
+        elif rsi_4h > rsi_prev:
+            score_long += 1
+            reasons.append(f"✅ RSI Rising: {rsi_4h:.0f}")
+        else:
+            score_short += 1
+            reasons.append(f"✅ RSI Falling: {rsi_4h:.0f}")
 
-    # ===== 3. VOLATILITY CHECK =====
-    vol_level, atr_pct = calc_volatility(df_1h)
-    if vol_level == 'MEDIUM':
-        score_long  += 1
-        score_short += 1
-        reasons.append(f"✅ Volatility GOOD: {atr_pct:.2f}%")
-    elif vol_level == 'HIGH':
-        reasons.append(f"⚠️ Volatility HIGH: {atr_pct:.2f}%")
-    else:
-        reasons.append(f"⚠️ Volatility LOW: {atr_pct:.2f}%")
-
-    # ===== 4. WHALE FLOW =====
+    # 3. WHALE FLOW
     total_whale = wb + ws
-    if total_whale > 20:
-        if wb > ws * 2:
-            score_long += 3
-            reasons.append(f"✅ Whale BUYING: {wb:.1f} BTC")
-        elif ws > wb * 2:
-            score_short += 3
-            reasons.append(f"✅ Whale SELLING: {ws:.1f} BTC")
+    if total_whale > 10:
+        if wb > ws * 1.5:
+            score_long += 2
+            reasons.append(f"✅ Whale Buying: {wb:.1f} BTC")
+        elif ws > wb * 1.5:
+            score_short += 2
+            reasons.append(f"✅ Whale Selling: {ws:.1f} BTC")
 
-    # ===== 5. FUNDING RATE =====
-    if fr < -0.03:
+    # 4. FUNDING RATE
+    if fr < -0.02:
         score_long += 2
         reasons.append(f"✅ Funding Negative: {fr:.3f}%")
-    elif fr > 0.03:
+    elif fr > 0.02:
         score_short += 2
         reasons.append(f"✅ Funding Positive: {fr:.3f}%")
 
-    # ===== 6. LONG/SHORT RATIO =====
-    if ls > 1.8:
+    # 5. LONG/SHORT
+    if ls > 1.5:
         score_short += 2
         reasons.append(f"✅ Longs Overcrowded: {ls:.2f}")
-    elif ls < 0.6:
+    elif ls < 0.7:
         score_long += 2
         reasons.append(f"✅ Shorts Overcrowded: {ls:.2f}")
 
-    # ===== 7. FEAR & GREED =====
-    if fg < 25:
+    # 6. FEAR GREED
+    if fg < 30:
         score_long += 2
-        reasons.append(f"✅ Extreme Fear: {fg}")
-    elif fg > 75:
+        reasons.append(f"✅ Fear Zone: {fg}")
+    elif fg > 70:
         score_short += 2
-        reasons.append(f"✅ Extreme Greed: {fg}")
-    elif 40 <= fg <= 60:
-        reasons.append(f"ℹ️ Fear/Greed Neutral: {fg}")
+        reasons.append(f"✅ Greed Zone: {fg}")
 
-    # ===== 8. MACD 1H =====
-    macd, sig, hist = calc_macd(df_1h['close'])
+    # 7. MACD
+    _, _, hist = calc_macd(df_1h['close'])
     if hist.iloc[-1] > 0 and hist.iloc[-1] > hist.iloc[-2]:
         score_long += 1
         reasons.append("✅ MACD Bullish")
@@ -297,80 +239,52 @@ def generate_daily_signal():
         score_short += 1
         reasons.append("✅ MACD Bearish")
 
-    # ===== 9. BB POSITION =====
+    # 8. BOLLINGER BANDS
     bb_upper, bb_mid, bb_lower = calc_bb(df_1h['close'])
     if price < bb_lower.iloc[-1]:
         score_long += 2
-        reasons.append("✅ Below BB Lower (Oversold)")
+        reasons.append("✅ Below BB (Oversold)")
     elif price > bb_upper.iloc[-1]:
         score_short += 2
-        reasons.append("✅ Above BB Upper (Overbought)")
+        reasons.append("✅ Above BB (Overbought)")
     elif price > bb_mid.iloc[-1]:
         score_long += 1
         reasons.append("✅ Above BB Mid")
+    else:
+        score_short += 1
+        reasons.append("✅ Below BB Mid")
 
-    # ===== 10. KEY LEVELS =====
-    highs, lows = find_key_levels(df_4h)
-    
-    for low in lows:
-        if abs(price - low) / price < 0.01:
-            score_long += 2
-            reasons.append(f"✅ At Key Support: ${low:,.0f}")
-            break
-    
-    for high in highs:
-        if abs(price - high) / price < 0.01:
-            score_short += 2
-            reasons.append(f"✅ At Key Resistance: ${high:,.0f}")
-            break
-
-    # ===== FINAL DECISION =====
-    # Minimum score chahiye 10
-    # Clear direction - ek side 2x dusre se
-    
+    # ===== DECISION =====
+    # Score 8+ chahiye
     direction = None
     score     = 0
-    max_score = 20
 
-    if score_long >= 10 and score_long >= score_short * 1.8:
+    if score_long >= 8 and score_long > score_short:
         direction = 'LONG'
         score     = score_long
-    elif score_short >= 10 and score_short >= score_long * 1.8:
+    elif score_short >= 8 and score_short > score_long:
         direction = 'SHORT'
         score     = score_short
 
     if not direction:
         return None
 
-    # ===== CALCULATE LEVELS =====
-    atr_val = calc_atr(df_1h).iloc[-1]
-    
-    # Volatility ke hisaab se SL adjust karo
-    if vol_level == 'HIGH':
-        sl_mult  = 2.5
-        tp1_mult = 3.0
-        tp2_mult = 5.0
-    elif vol_level == 'MEDIUM':
-        sl_mult  = 2.0
-        tp1_mult = 3.5
-        tp2_mult = 6.0
-    else:
-        sl_mult  = 1.5
-        tp1_mult = 3.0
-        tp2_mult = 5.0
+    # LEVELS
+    atr_val  = calc_atr(df_1h).iloc[-1]
+    atr_pct  = (atr_val / price) * 100
 
     if direction == 'LONG':
-        sl  = price - (atr_val * sl_mult)
-        tp1 = price + (atr_val * tp1_mult)
-        tp2 = price + (atr_val * tp2_mult)
+        sl  = price - (atr_val * 2.0)
+        tp1 = price + (atr_val * 3.0)
+        tp2 = price + (atr_val * 5.0)
     else:
-        sl  = price + (atr_val * sl_mult)
-        tp1 = price - (atr_val * tp1_mult)
-        tp2 = price - (atr_val * tp2_mult)
+        sl  = price + (atr_val * 2.0)
+        tp1 = price - (atr_val * 3.0)
+        tp2 = price - (atr_val * 5.0)
 
-    risk    = abs(price - sl)
-    rr1     = abs(tp1 - price) / risk if risk > 0 else 0
-    rr2     = abs(tp2 - price) / risk if risk > 0 else 0
+    risk     = abs(price - sl)
+    rr1      = abs(tp1 - price) / risk if risk > 0 else 0
+    rr2      = abs(tp2 - price) / risk if risk > 0 else 0
     risk_pct = (risk / price) * 100
 
     return {
@@ -380,14 +294,12 @@ def generate_daily_signal():
         'tp1'        : tp1,
         'tp2'        : tp2,
         'score'      : score,
-        'max_score'  : max_score,
         'score_long' : score_long,
         'score_short': score_short,
         'reasons'    : reasons,
         'rr1'        : rr1,
         'rr2'        : rr2,
         'risk_pct'   : risk_pct,
-        'vol_level'  : vol_level,
         'atr_pct'    : atr_pct,
         'fg'         : fg,
         'fr'         : fr,
@@ -397,86 +309,75 @@ def generate_daily_signal():
 # ==================== GMAIL ====================
 def send_gmail(sig):
     try:
-        d   = sig['direction']
+        d = sig['direction']
         msg = EmailMessage()
         msg.set_content(f"""
-{'🚀' if d=='LONG' else '🔻'} BTC {d} SIGNAL!
+{'🚀 LONG' if d=='LONG' else '🔻 SHORT'} SIGNAL!
 
 ━━━━━━━━━━━━━━━━━━━━━
-💰 Price  : ${sig['price']:,.2f}
-🛑 SL     : ${sig['sl']:,.2f} (-{sig['risk_pct']:.1f}%)
-🎯 TP1    : ${sig['tp1']:,.2f} (1:{sig['rr1']:.1f})
-🎯 TP2    : ${sig['tp2']:,.2f} (1:{sig['rr2']:.1f})
+💰 Price   : ${sig['price']:,.2f}
+🛑 SL      : ${sig['sl']:,.2f} (-{sig['risk_pct']:.1f}%)
+🎯 TP1     : ${sig['tp1']:,.2f} (1:{sig['rr1']:.1f})
+🎯 TP2     : ${sig['tp2']:,.2f} (1:{sig['rr2']:.1f})
 ━━━━━━━━━━━━━━━━━━━━━
-💪 Score  : {sig['score']}/{sig['max_score']}
-⚡ ATR    : {sig['atr_pct']:.2f}%
-😨 FG     : {sig['fg']}
-📊 L/S    : {sig['ls']:.2f}
-💰 FR     : {sig['fr']:.3f}%
+Score      : {sig['score']}/20
+ATR        : {sig['atr_pct']:.2f}%
+Fear/Greed : {sig['fg']}
+Funding    : {sig['fr']:.3f}%
+L/S Ratio  : {sig['ls']:.2f}
 ━━━━━━━━━━━━━━━━━━━━━
 REASONS:
 {chr(10).join(sig['reasons'])}
 ━━━━━━━━━━━━━━━━━━━━━
-Time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} IST
         """)
-        msg['Subject'] = f"🚨 BTC {d} SIGNAL - Score:{sig['score']}/{sig['max_score']}"
+        msg['Subject'] = f"🚨 BTC {d} - Score:{sig['score']}/20 - ${sig['price']:,.0f}"
         msg['From']    = EMAIL
         msg['To']      = EMAIL
-
         s = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         s.login(EMAIL, APP_PASS)
         s.send_message(msg)
         s.quit()
-        print(f"✅ Gmail Sent: {d} @ ${sig['price']:,.0f}")
+        print(f"✅ Gmail Sent! {d} @ ${sig['price']:,.0f}")
+        return True
     except Exception as e:
         print(f"❌ Gmail Error: {e}")
+        return False
 
-# ==================== MAIN LOOP ====================
-print("🚀 Ultimate Daily Signal Bot Started!")
-print("📧 Gmail Alert Active")
-print("⏳ Scanning market every 5 minutes...")
+# ==================== MAIN ====================
+print("🚀 Bot Started - 24/7 Active!")
+print(f"📧 Gmail: {EMAIL}")
 
 last_alert_date = ""
-last_alert_time = 0
 
 while True:
     try:
         now   = datetime.utcnow()
         today = now.strftime('%Y-%m-%d')
-        price = get_price()
 
-        # IST time
+        # IST Time
         ist_h = (now.hour + 5) % 24
         ist_m = now.minute + 30
         if ist_m >= 60:
             ist_h = (ist_h + 1) % 24
             ist_m -= 60
 
-        print(f"\r⏰ {ist_h:02d}:{ist_m:02d} IST | 💰 ${price:,.0f} | Today Signal: {'✅ SENT' if last_alert_date == today else '⏳ WAITING'}", end="")
+        print(f"\r⏰ {ist_h:02d}:{ist_m:02d} IST | Signal: {'✅ SENT' if last_alert_date == today else '⏳ WAITING'}", end="")
 
-        # Sirf 1 signal per day
+        # New day = reset
         if last_alert_date != today:
+            print(f"\n🔍 Scanning...")
+            sig = generate_signal()
 
-            # Best time to scan: 
-            # 9:30 AM - 11:30 AM IST (London open)
-            # 7:30 PM - 9:30 PM IST (NY open)
-            
-            london_open = (ist_h == 9  and ist_m >= 30) or ist_h == 10 or (ist_h == 11 and ist_m <= 30)
-            ny_open     = (ist_h == 19 and ist_m >= 30) or ist_h == 20 or (ist_h == 21 and ist_m <= 30)
-
-            if london_open or ny_open:
-                print(f"\n\n🔍 Scanning for daily signal...")
-                sig = generate_daily_signal()
-
-                if sig:
-                    print(f"\n🎯 SIGNAL FOUND: {sig['direction']} Score:{sig['score']}/{sig['max_score']}")
-                    send_gmail(sig)
+            if sig:
+                print(f"\n🎯 Signal: {sig['direction']} | Score: {sig['score']}/20")
+                if send_gmail(sig):
                     last_alert_date = today
-                    last_alert_time = time.time()
-                else:
-                    print(f"\n⏳ No clear signal yet... Scanning again in 5 min")
+            else:
+                print(f"\n⏳ Score too low | Long:{sig['score_long'] if sig else 0} Short:{sig['score_short'] if sig else 0}")
 
-        time.sleep(300)  # 5 min
+        # Har 1 ghante mein scan
+        time.sleep(3600)
 
     except Exception as e:
         print(f"\nError: {e}")
