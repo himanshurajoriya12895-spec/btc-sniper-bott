@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 
-TOKEN   = "8966743878:AAFRB2rB7nxM8eMQN5Om6_veQ4Ow2m8lIo4"
+TOKEN   = "8966743878:AAFlIvvp5EajKUxbgH-VSBEy_gAIsevK3Jk"
 CHAT_ID = "8193076289"
 SYMBOL  = "BTCUSDT"
 
